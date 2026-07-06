@@ -46,6 +46,7 @@ program optic
  use m_xomp
  use m_abicore
  use m_optic_tools
+ use m_optic_shg, only : optic_shg
  use m_wfk
  use m_nctk
  use m_hdr
@@ -84,11 +85,13 @@ program optic
 #ifdef HAVE_NETCDF
  integer :: ncid, varid, ncerr
 #endif
- integer :: num_lin_comp=1,num_nonlin_comp=0,num_linel_comp=0,num_nonlin2_comp=0
+ integer :: num_lin_comp=1,num_nonlin_comp=0,num_linel_comp=0,num_nonlin2_comp=0,num_shg_comp=0
  integer :: autoparal=0,max_ncpus=0
  integer :: nonlin_comp(27) = 0, linel_comp(27) = 0, nonlin2_comp(27) = 0
+ integer :: shg_comp(27) = 0
  integer :: lin_comp(9) = [11, 22 ,33, 12, 13, 21, 23, 31, 32]
  integer :: prtlincompmatrixelements=0, nband_sum = -1
+ integer :: shg_formula=1, shg_use_wrong_scissor=0
  real(dp) :: domega, eff
  real(dp) :: broadening,maxomega,scissor,tolerance
  real(dp) :: tcpu,tcpui,twall,twalli
@@ -124,9 +127,9 @@ program optic
  ! Input file
  namelist /FILES/ ddkfile_1, ddkfile_2, ddkfile_3, wfkfile
  namelist /PARAMETERS/ broadening, domega, maxomega, scissor, tolerance, do_antiresonant, do_temperature, &
-                       autoparal, max_ncpus, prtlincompmatrixelements, nband_sum
+                       autoparal, max_ncpus, prtlincompmatrixelements, nband_sum, shg_formula, shg_use_wrong_scissor
  namelist /COMPUTATIONS/ num_lin_comp, lin_comp, num_nonlin_comp, nonlin_comp, &
-          num_linel_comp, linel_comp, num_nonlin2_comp, nonlin2_comp
+          num_linel_comp, linel_comp, num_nonlin2_comp, nonlin2_comp, num_shg_comp, shg_comp
  namelist /TEMPERATURE/ epfile
 
 ! *********************************************************************************
@@ -202,6 +205,8 @@ program optic
    scissor = 0.0_dp ! no scissor by default
    tolerance = 1e-3_dp ! Ha
    prtlincompmatrixelements = 0 ! print the sum elements for external analysis
+   shg_formula = 1 ! 1: Rashkeev1998 dynamic, 2: Lin1999 static
+   shg_use_wrong_scissor = 0 ! 0: corrected scissor scheme, 1: legacy/wrong scissor scheme
    do_antiresonant = .TRUE. ! do use antiresonant approximation (only resonant transitions in the calculation)
    do_temperature = .FALSE.
 
@@ -223,6 +228,15 @@ program optic
    end if
    if (num_nonlin2_comp > 0 .and. all(nonlin2_comp(1:num_nonlin2_comp) == 0)) then
      ABI_ERROR("nonlin2_comp must be specified when num_nonlin2_comp > 0")
+   end if
+   if (num_shg_comp > 0 .and. all(shg_comp(1:num_shg_comp) == 0)) then
+     ABI_ERROR("shg_comp must be specified when num_shg_comp > 0")
+   end if
+   if (shg_formula /= 1 .and. shg_formula /= 2) then
+     ABI_ERROR("shg_formula must be 1 (Rashkeev1998 dynamic) or 2 (Lin1999 static)")
+   end if
+   if (shg_use_wrong_scissor /= 0 .and. shg_use_wrong_scissor /= 1) then
+     ABI_ERROR("shg_use_wrong_scissor must be 0 or 1")
    end if
 
    ! Open GS wavefunction file
@@ -370,6 +384,10 @@ program optic
  call xmpi_bcast(linel_comp, master, comm, ierr)
  call xmpi_bcast(num_nonlin2_comp, master, comm, ierr)
  call xmpi_bcast(nonlin2_comp, master, comm, ierr)
+ call xmpi_bcast(num_shg_comp, master, comm, ierr)
+ call xmpi_bcast(shg_comp, master, comm, ierr)
+ call xmpi_bcast(shg_formula, master, comm, ierr)
+ call xmpi_bcast(shg_use_wrong_scissor, master, comm, ierr)
  call xmpi_bcast(do_antiresonant, master, comm, ierr)
  call xmpi_bcast(do_ep_renorm, master, comm, ierr)
  call xmpi_bcast(ep_ntemp, master, comm, ierr)
@@ -512,6 +530,10 @@ program optic
    write(std_out,'(27i4)') linel_comp(1:num_linel_comp)
    write(std_out,'(a)') ' non-linear coeffs (V2) to be calculated :'
    write(std_out,'(27i4)') nonlin2_comp(1:num_nonlin2_comp)
+   write(std_out,'(a)') ' independent SHG coeffs to be calculated :'
+   write(std_out,'(27i4)') shg_comp(1:num_shg_comp)
+   write(std_out,'(a,i1)') ' independent SHG formula :',shg_formula
+   write(std_out,'(a,i1)') ' independent SHG wrong-scissor scheme :',shg_use_wrong_scissor
    write(std_out,'(a,i1)') ' linear optic matrix elements will be printed :',prtlincompmatrixelements
 
 #ifdef HAVE_NETCDF
@@ -528,7 +550,7 @@ program optic
    NCF_CHECK(nctk_def_dims(optic_ncid, [nctkdim_t("ntemp", ep_ntemp), nctkdim_t("nomega", nomega)], defmode=.True.))
 
    ncerr = nctk_def_iscalars(optic_ncid, [character(len=nctk_slen) :: &
-       "do_antiresonant", "do_ep_renorm", "nband_sum"])
+       "do_antiresonant", "do_ep_renorm", "nband_sum", "shg_formula", "shg_use_wrong_scissor"])
    NCF_CHECK(ncerr)
    ncerr = nctk_def_dpscalars(optic_ncid, [character(len=nctk_slen) :: &
      "broadening", "domega", "maxomega", "scissor", "tolerance"])
@@ -638,8 +660,8 @@ program optic
    ii = 0; if (do_antiresonant) ii = 1
    jj = 0; if (do_ep_renorm) jj = 1
    ncerr = nctk_write_iscalars(optic_ncid, [character(len=nctk_slen) :: &
-     "do_antiresonant", "do_ep_renorm", "nband_sum"], &
-     [ii, jj, nband_sum])
+     "do_antiresonant", "do_ep_renorm", "nband_sum", "shg_formula", "shg_use_wrong_scissor"], &
+     [ii, jj, nband_sum, shg_formula, shg_use_wrong_scissor])
    NCF_CHECK(ncerr)
 
    ncerr = nctk_write_dpscalars(optic_ncid, [character(len=nctk_slen) :: &
@@ -656,6 +678,28 @@ program optic
  ABI_FREE(eigen11)
  ABI_FREE(eigen12)
  ABI_FREE(eigen13)
+
+ ! Independent SHG implementations using raw momentum matrix elements.
+ call wrtout(std_out," optic : Call optic_shg")
+ do ii=1,num_shg_comp
+   nlin1 = int(shg_comp(ii)/100.0_dp)
+   nlin2 = int((shg_comp(ii)-nlin1*100.0_dp)/10.0_dp)
+   nlin3 = mod(shg_comp(ii),10)
+   write(msg,*) ' optic_shg ', nlin1,nlin2,nlin3
+   call wrtout(std_out, msg)
+   call int2char4(nlin1,s1)
+   call int2char4(nlin2,s2)
+   call int2char4(nlin3,s3)
+   ABI_CHECK((s1(1:1)/='#'),'Bug: string length too short!')
+   ABI_CHECK((s2(1:1)/='#'),'Bug: string length too short!')
+   ABI_CHECK((s3(1:1)/='#'),'Bug: string length too short!')
+   tmp_radix = trim(prefix)//"_"//trim(s1)//"_"//trim(s2)//"_"//trim(s3)
+   itemp = 1
+
+   call optic_shg(ii, itemp, nband_sum, cryst, ks_ebands, pmat, &
+                  nlin1, nlin2, nlin3, nomega, domega, scissor, broadening, tolerance, tmp_radix, &
+                  shg_formula, shg_use_wrong_scissor, comm)
+ end do
 
  ! Renormalize matrix elements if scissors is being used.
  call pmat_renorm(ks_ebands%fermie, ks_ebands%eig, mband, nkpt, nsppol, pmat, scissor)
