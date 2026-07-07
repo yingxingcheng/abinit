@@ -24,6 +24,8 @@ add_library(67_common STATIC
   m_eprenorms.F90
   m_sigtk.F90
   m_odamix.F90
+  nlokit_shg.F90
+  m_optic_shg.F90
   m_optic_tools.F90
   m_optics_vloc.F90
   m_rot_cg.F90

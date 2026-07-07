@@ -6,3 +6,6 @@
 	path = tests/modules_with_data/MgB2_eph4isotc
 	url = https://github.com/abinit/MgB2_eph4isotc.git
 	branch = main
+[submodule "external/nlokit-fortran"]
+	path = external/nlokit-fortran
+	url = https://github.com/yingxingcheng/nlokit-fortran.git
