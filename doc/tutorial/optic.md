@@ -237,6 +237,55 @@ increasing the cut-off energy, the k point sampling and the number of unoccupied
 
 Similar considerations apply to the non-linear spectra.
 
+## Independent SHG tensor examples
+
+The standard nonlinear optic output above uses the historical optic
+second-order response implementation. The source tree also provides examples
+for the independent SHG implementation based on the Rashkeev dynamic formula
+and the Lin1999 static formula.
+
+These examples use the same WFK and DDK files produced by *toptic_1.abi*.
+If the source tree was cloned without submodules, initialize the SHG kernel
+library before building optic:
+
+```sh
+git submodule update --init external/nlokit-fortran
+```
+
+After running *toptic_1.abi*, copy one of the SHG optic inputs into
+*Work_optic*:
+
+```sh
+cp $ABI_HOME/doc/tutorial/optic_assets/toptic_2_shg_rashkeev.abi .
+cp $ABI_HOME/doc/tutorial/optic_assets/toptic_2_shg_lin1999_static.abi .
+```
+
+The Rashkeev input evaluates the dynamic SHG tensor. The Lin1999 input
+evaluates the static CASTEP/Lin1999 tensor with explicit Kleinman symmetry.
+Both inputs request only two tensor components for a short tutorial run; edit
+[[num_shg_comp]] and [[shg_comp]] to compute a different component list, or use
+a full component list for the complete tensor.
+
+Run the examples with:
+
+```sh
+optic toptic_2_shg_rashkeev.abi > log_rashkeev 2> err_rashkeev
+optic toptic_2_shg_lin1999_static.abi > log_lin1999 2> err_lin1999
+```
+
+The corresponding output files are named
+*toptic_2_shg_rashkeev-RashkeevSHG.out* and
+*toptic_2_shg_lin1999_static-Lin1999StaticSHG.out*. For an MPI build, the same
+inputs can be run for example with:
+
+```sh
+mpirun -np 2 optic toptic_2_shg_rashkeev.abi
+```
+
+The main SHG controls in these examples are [[shg_formula]],
+[[shg_use_wrong_scissor]], [[num_shg_comp]], and [[shg_comp]]. The scissor shift
+is set with the usual optic [[scissor]] variable.
+
 ## Faster computation of the imaginary part of the linear optical response
 
 In the case of the imaginary part of the linear optical response, there are

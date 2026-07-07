@@ -1,0 +1,25 @@
+&FILES
+ ddkfile_1 = 'toptic_1o_DS4_1WF7',
+ ddkfile_2 = 'toptic_1o_DS5_1WF8',
+ ddkfile_3 = 'toptic_1o_DS6_1WF9',
+ wfkfile = 'toptic_1o_DS3_WFK'
+/
+&PARAMETERS
+ broadening = 0.002,
+ domega = 0.0003,
+ maxomega = 0.001,
+ scissor = 0.000,
+ tolerance = 0.002,
+ shg_formula = 1,
+ shg_use_wrong_scissor = 0
+/
+&COMPUTATIONS
+ num_lin_comp = 1,
+ lin_comp = 11,
+ num_nonlin_comp = 2,
+ nonlin_comp = 123,222,
+ num_shg_comp = 2,
+ shg_comp = 123,222,
+ num_linel_comp = 0,
+ num_nonlin2_comp = 0,
+/
